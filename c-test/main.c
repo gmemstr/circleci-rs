@@ -8,9 +8,12 @@ int main() {
 		printf("No API key available, did you set $CIRCLE_TOKEN?\n");
 		return 1;
 	}
-	Api *api = api_v1("https://circleci.com/api/v1.1", apikey);
-	CMe me = api_v1_me(api);
-	printf(me.login, "\n");
+	Api *api = circleci_api("https://circleci.com/api", apikey);
+	CMe me = circleci_api_me(api);
+
+	// CCollaboration collabs[255];
+	// circleci_api_collaborations(api, collabs, 255);
+	printf(me.id);
+
 	return 0;
 }
-
