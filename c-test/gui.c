@@ -2,11 +2,11 @@
 #include "../target/debug/circleci.h"
 #include <stdio.h>
 
-CMe circleci_username(char *apikey) {
+CMe* circleci_username(char *apikey) {
     // Ensure you've got your CircleCI token loaded in the environment.
 
-    Api *api = api_v1("https://circleci.com/api", apikey);
-    CMe me = api_v1_me(api);
+    Api *api = circleci_api("https://circleci.com/api", apikey);
+    CMe *me = circleci_api_me(api);
 
     return me;
 }
@@ -26,9 +26,9 @@ static void activate (GtkApplication *app, gpointer user_data) {
         return;
     }
     char * prefix = "CircleCI Username: ";
-    CMe me = circleci_username(apikey);
+    CMe *me = circleci_username(apikey);
     char buf[256];
-    snprintf(buf, sizeof(buf), "%s%s", prefix, me.login);
+    snprintf(buf, sizeof(buf), "%s%s", prefix, me->login);
 
     GtkWidget* username = gtk_label_new (buf);
     gtk_window_set_child (GTK_WINDOW (window), username);

@@ -7,6 +7,7 @@ use crate::api_v2::{Collaboration, Me, Api};
 use api_v2::CCollaboration;
 use crate::api_v2::CMe;
 use std::os::raw::c_char;
+use std::{ptr, mem};
 
 #[no_mangle]
 pub extern "C" fn circleci_api(base_url: *const c_char, api_key: *const c_char) -> *mut Api {
@@ -25,7 +26,7 @@ pub extern "C" fn circleci_api(base_url: *const c_char, api_key: *const c_char) 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn circleci_api_me(api: *const api_v2::Api) -> CMe {
+pub unsafe extern "C" fn circleci_api_me(api: *const api_v2::Api) -> *mut CMe {
     let api = &*api;
     let res = match api.me() {
         Ok(r) => r,
@@ -37,15 +38,15 @@ pub unsafe extern "C" fn circleci_api_me(api: *const api_v2::Api) -> CMe {
         },
     };
 
-    let id = CString::new(res.id).unwrap();
-    let login = CString::new(res.login).unwrap();
-    let name = CString::new(res.name).unwrap();
+    let id = CString::new(res.id).expect("Err: CString::new()").into_raw();
+    let login = CString::new(res.login).expect("Err: CString::new()").into_raw();
+    let name = CString::new(res.name).expect("Err: CString::new()").into_raw();
 
-    CMe{id: id.as_ptr(), login: login.as_ptr(), name: name.as_ptr()}
+    Box::into_raw(Box::new(CMe{id, login, name}))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn circleci_api_collaborations(api: *const api_v2::Api, c_buf: *mut CCollaboration, mut c_len: c_int) {
+pub unsafe extern "C" fn circleci_api_collaborations(api: *const api_v2::Api, outlen: *mut c_int) -> *mut CCollaboration {
     let api = &*api;
     let mut res = match api.collaborations() {
         Ok(r) => r,
@@ -57,19 +58,21 @@ pub unsafe extern "C" fn circleci_api_collaborations(api: *const api_v2::Api, c_
         },
     };
 
-    let ccolabs: Vec<CCollaboration> = res.drain(1..).map(|x| {
-        let vcs_type = x.vcs_type.as_ptr() as *mut i8;
-        let name = x.name.as_ptr() as *mut i8;
-        let avatar_url = x.avatar_url.as_ptr() as *mut i8;
+    let mut ccolabs: Vec<CCollaboration> = res.drain(1..).map(|x| {
+        let vcs_type = CString::new(x.vcs_type).expect("Err: CString::new()").into_raw();
+        let name = CString::new(x.name).expect("Err: CString::new()").into_raw();
+        let avatar_url = CString::new(x.avatar_url).expect("Err: CString::new()").into_raw();
         CCollaboration{vcs_type, name, avatar_url}
     }).collect();
 
-    if c_len != (ccolabs.len() as i32) {
-        c_len = ccolabs.len() as i32;
-    }
+    ccolabs.shrink_to_fit();
+    assert!(ccolabs.len() == ccolabs.capacity());
 
-    std::slice::from_raw_parts_mut(c_buf, c_len as usize)
-        .copy_from_slice(&ccolabs);
+    let len = ccolabs.len();
+    let ptr = ccolabs.as_mut_ptr();
+    mem::forget(ccolabs);
+    ptr::write(outlen, len as c_int);
+    ptr
 }
 
 #[cfg(test)]
