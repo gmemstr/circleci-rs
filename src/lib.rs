@@ -5,7 +5,7 @@ use std::ffi::CStr;
 use libc::c_int;
 use crate::api_v2::CTrigger;
 use crate::api_v2::CVCS;
-use crate::api_v2::{Collaboration, Me, Api, CCollaboration, Project, CProject, CMe, Pipeline, CPipeline, CUser, CCommit};
+use crate::api_v2::{Collaboration, Me, Api, CCollaboration, CProject, CMe, CPipeline, CUser, CCommit};
 use std::os::raw::c_char;
 use std::{ptr, mem};
 
@@ -50,13 +50,13 @@ pub unsafe extern "C" fn circleci_api_collaborations(api: *const api_v2::Api, ou
     let api = &*api;
     let mut res = match api.collaborations() {
         Ok(r) => r,
-        Err(_) => {
-            let v1 = "none".to_string();
-            let v2 = "none".to_string();
-            let v3 = "none".to_string();
-            vec![Collaboration { vcs_type: v1, name: v2, avatar_url: v3 }]
-        },
+        Err(_) => Vec::new()
     };
+
+    if res.len() == 0 {
+        ptr::write(outlen, 0 as c_int);
+        return Vec::new().as_mut_ptr()
+    }
 
     let mut ccolabs: Vec<CCollaboration> = res.drain(1..).map(|x| {
         let vcs_type = CString::new(x.vcs_type).expect("Err: CString::new()").into_raw();
@@ -93,7 +93,8 @@ pub unsafe extern "C" fn circleci_api_projects(api: *const api_v2::Api, outlen: 
         let username = CString::new(x.username).expect("Err: CString::new()").into_raw();
         let reponame = CString::new(x.reponame).expect("Err: CString::new()").into_raw();
         let default_branch = CString::new(x.default_branch).expect("Err: CString::new()").into_raw();
-        CProject{vcs_url, following: x.following, username, reponame, default_branch}
+        let vcs_type = CString::new(x.vcs_type).expect("Err: CString::new()").into_raw();
+        CProject{vcs_url, following: x.following, username, reponame, default_branch, vcs_type}
     }).collect();
 
     cprojects.shrink_to_fit();

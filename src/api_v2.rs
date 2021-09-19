@@ -48,7 +48,8 @@ pub struct Project {
     pub following: bool,
     pub username: String,
     pub reponame: String,
-    pub default_branch: String
+    pub default_branch: String,
+    pub vcs_type: String
 }
 
 #[repr(C)]
@@ -57,7 +58,8 @@ pub struct CProject {
     pub following: bool,
     pub username: *const libc::c_char,
     pub reponame: *const libc::c_char,
-    pub default_branch: *const libc::c_char
+    pub default_branch: *const libc::c_char,
+    pub vcs_type: *const libc::c_char
 }
 
 #[derive(Deserialize, Debug)]
