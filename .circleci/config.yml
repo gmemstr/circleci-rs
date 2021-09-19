@@ -6,4 +6,5 @@ orbs:
 workflows:
   lint-test-build:
     jobs:
-      - rust/lint-test-build
+      - rust/lint-test-build:
+          version: 1.55.0
