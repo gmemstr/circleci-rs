@@ -28,5 +28,11 @@ int main() {
 		printf("Project %d: %s\n", i+1, projects[i].reponame);
 	}
 
+	int len3;
+	CPipeline *pipelines = circleci_api_project_pipelines(api, "gh/gmemstr/circleci-rs", &len3);
+	printf("Total pipelines in github/gmemstr/circleci-rs: %d\n", len3);
+	for (int i=0; i<len3; i++) {
+		printf("Pipeline #%d: %s\n", *pipelines[i].number, pipelines[i].id);
+	}
 	return 0;
 }

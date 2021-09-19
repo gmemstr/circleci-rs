@@ -3,7 +3,9 @@ mod api_v2;
 use std::ffi::CString;
 use std::ffi::CStr;
 use libc::c_int;
-use crate::api_v2::{Collaboration, Me, Api, CCollaboration, Project,CProject, CMe};
+use crate::api_v2::CTrigger;
+use crate::api_v2::CVCS;
+use crate::api_v2::{Collaboration, Me, Api, CCollaboration, Project, CProject, CMe, Pipeline, CPipeline, CUser, CCommit};
 use std::os::raw::c_char;
 use std::{ptr, mem};
 
@@ -78,14 +80,13 @@ pub unsafe extern "C" fn circleci_api_projects(api: *const api_v2::Api, outlen: 
     let api = &*api;
     let mut res = match api.projects() {
         Ok(r) => r,
-        Err(_) => {
-            let v1 = "none".to_string();
-            let v2 = "none".to_string();
-            let v3 = "none".to_string();
-            let v4 = "none".to_string();
-            vec![Project { vcs_url: v1, following: false, username: v2, reponame: v3, default_branch: v4}]
-        },
+        Err(_) => Vec::new(),
     };
+
+    if res.len() == 0 {
+        ptr::write(outlen, 0 as c_int);
+        return Vec::new().as_mut_ptr()
+    }
 
     let mut cprojects: Vec<CProject> = res.drain(1..).map(|x| {
         let vcs_url = CString::new(x.vcs_url).expect("Err: CString::new()").into_raw();
@@ -105,9 +106,69 @@ pub unsafe extern "C" fn circleci_api_projects(api: *const api_v2::Api, outlen: 
     ptr
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn circleci_api_project_pipelines(api: *const api_v2::Api, slug: *const libc::c_char, outlen: *mut c_int) -> *mut CPipeline {
+    let api = &*api;
+    let rslug = CStr::from_ptr(slug).to_str().unwrap();
+    let rrslug = String::from(rslug);
+    let mut res = match api.pipelines(rrslug) {
+        Ok(r) => r,
+        Err(_) => Vec::new()
+    };
+
+    if res.len() == 0 {
+        ptr::write(outlen, 0 as c_int);
+        return Vec::new().as_mut_ptr()
+    }
+
+    let mut cpipelines: Vec<CPipeline> = res.drain(1..).map(|x| {
+        let id = CString::new(x.id).expect("Err: CString::new()").into_raw();
+        let project_slug = CString::new(x.project_slug).expect("Err: CString::new()").into_raw();
+        let updated_at = CString::new(x.updated_at).expect("Err: CString::new()").into_raw();
+        let number = x.number;
+        let state = CString::new(x.state).expect("Err: CString::new()").into_raw();
+        let created_at = CString::new(x.created_at).expect("Err: CString::new()").into_raw();
+        let trigger = CTrigger{
+            ttype:  CString::new(x.trigger.ttype).expect("Err: CString::new()").into_raw(),
+            received_at: CString::new(x.trigger.received_at).expect("Err: CString::new()").into_raw(),
+            actor: CUser {
+                login: CString::new(x.trigger.actor.login).expect("Err: CString::new()").into_raw(),
+                avatar_url: CString::new(x.trigger.actor.avatar_url).expect("Err: CString::new()").into_raw(),
+
+            }
+        };
+
+        let vcs = CVCS {
+            provider_name: CString::new(x.vcs.provider_name).expect("Err: CString::new()").into_raw(),
+            target_repository_url: CString::new(x.vcs.target_repository_url).expect("Err: CString::new()").into_raw(),
+            branch: CString::new(x.vcs.branch).expect("Err: CString::new()").into_raw(),
+            review_id: CString::new(x.vcs.review_id).expect("Err: CString::new()").into_raw(),
+            review_url: CString::new(x.vcs.review_url).expect("Err: CString::new()").into_raw(),
+            revision: CString::new(x.vcs.revision).expect("Err: CString::new()").into_raw(),
+            tag: CString::new(x.vcs.tag).expect("Err: CString::new()").into_raw(),
+            commit: CCommit {
+                subject: CString::new(x.vcs.commit.subject).expect("Err: CString::new()").into_raw(),
+                body: CString::new(x.vcs.commit.body).expect("Err: CString::new()").into_raw(),
+            },
+            origin_repository_url: CString::new(x.vcs.origin_repository_url).expect("Err: CString::new()").into_raw(),
+        };
+
+        CPipeline{ id, project_slug, updated_at, number: &number, state, created_at, trigger, vcs }
+    }).collect();
+
+    cpipelines.shrink_to_fit();
+    assert!(cpipelines.len() == cpipelines.capacity());
+
+    let len = cpipelines.len();
+    let ptr = cpipelines.as_mut_ptr();
+    mem::forget(cpipelines);
+    ptr::write(outlen, len as c_int);
+    ptr
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::api_v2::{self, Collaboration, Project};
+    use crate::api_v2::{self, Collaboration, Pipeline, Project};
     use std::env;
 
     #[test]
@@ -181,5 +242,27 @@ mod tests {
         }
 
         assert_eq!(has, true)
+    }
+
+    #[test]
+    fn pipelines() {
+        let api_key = match env::var("CIRCLE_TOKEN") {
+            Ok(val) => val,
+            Err(_) => "".to_string(),
+        };
+
+        let api = api_v2::Api::new(
+            "https://circleci.com/api".to_string(),
+            api_key,
+        );
+        let pipelines: Vec<Pipeline> = match api.pipelines("gh/gmemstr/circleci-rs".to_string()) {
+            Ok(c) => c,
+            Err(e) => {
+                println!("Did not get expected result from endpoint!");
+                panic!("{}", e);
+            }
+        };
+
+        assert_ne!(pipelines.len(), 0)
     }
 }
