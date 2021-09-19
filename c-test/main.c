@@ -21,5 +21,12 @@ int main() {
 		printf("Collaboration %d: %s\n", i+1, collabs[i].name);
 	}
 
+	int len2;
+	CProject *projects = circleci_api_projects(api, &len2);
+	printf("Total projects: %d\n", len2);
+	for (int i=0; i<len2; i++) {
+		printf("Project %d: %s\n", i+1, projects[i].reponame);
+	}
+
 	return 0;
 }

@@ -30,6 +30,24 @@ pub struct CCollaboration {
     pub avatar_url: *const libc::c_char,
 }
 
+#[derive(Deserialize, Debug)]
+pub struct Project {
+    pub vcs_url: String,
+    pub following: bool,
+    pub username: String,
+    pub reponame: String,
+    pub default_branch: String
+}
+
+#[repr(C)]
+pub struct CProject {
+    pub vcs_url: *const libc::c_char,
+    pub following: bool,
+    pub username: *const libc::c_char,
+    pub reponame: *const libc::c_char,
+    pub default_branch: *const libc::c_char
+}
+
 pub struct Api {
     pub base_url: Url,
     pub api_key: String,
@@ -65,5 +83,19 @@ impl Api {
 
         let collaborations: Vec<Collaboration> = response.json()?;
         Ok(collaborations)
+    }
+
+    pub fn projects(&self) -> Result<Vec<Project>, Box<dyn std::error::Error>> {
+        let request_url = format!("{base}/v1.1/projects", base=self.base_url);
+
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .get(request_url)
+            .header("Circle-Token", &self.api_key)
+            .send()?;
+
+        let projects: Vec<Project> = response.json()?;
+
+        Ok(projects)
     }
 }

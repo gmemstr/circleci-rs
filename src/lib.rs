@@ -3,9 +3,7 @@ mod api_v2;
 use std::ffi::CString;
 use std::ffi::CStr;
 use libc::c_int;
-use crate::api_v2::{Collaboration, Me, Api};
-use api_v2::CCollaboration;
-use crate::api_v2::CMe;
+use crate::api_v2::{Collaboration, Me, Api, CCollaboration, Project,CProject, CMe};
 use std::os::raw::c_char;
 use std::{ptr, mem};
 
@@ -75,15 +73,42 @@ pub unsafe extern "C" fn circleci_api_collaborations(api: *const api_v2::Api, ou
     ptr
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn circleci_api_projects(api: *const api_v2::Api, outlen: *mut c_int) -> *mut CProject {
+    let api = &*api;
+    let mut res = match api.projects() {
+        Ok(r) => r,
+        Err(_) => {
+            let v1 = "none".to_string();
+            let v2 = "none".to_string();
+            let v3 = "none".to_string();
+            let v4 = "none".to_string();
+            vec![Project { vcs_url: v1, following: false, username: v2, reponame: v3, default_branch: v4}]
+        },
+    };
+
+    let mut cprojects: Vec<CProject> = res.drain(1..).map(|x| {
+        let vcs_url = CString::new(x.vcs_url).expect("Err: CString::new()").into_raw();
+        let username = CString::new(x.username).expect("Err: CString::new()").into_raw();
+        let reponame = CString::new(x.reponame).expect("Err: CString::new()").into_raw();
+        let default_branch = CString::new(x.default_branch).expect("Err: CString::new()").into_raw();
+        CProject{vcs_url, following: x.following, username, reponame, default_branch}
+    }).collect();
+
+    cprojects.shrink_to_fit();
+    assert!(cprojects.len() == cprojects.capacity());
+
+    let len = cprojects.len();
+    let ptr = cprojects.as_mut_ptr();
+    mem::forget(cprojects);
+    ptr::write(outlen, len as c_int);
+    ptr
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::api_v2::{self, Collaboration};
+    use crate::api_v2::{self, Collaboration, Project};
     use std::env;
-
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
 
     #[test]
     fn me() {
@@ -127,6 +152,32 @@ mod tests {
         let mut has = false;
         for c in &collabs {
             if c.name == "gmemstr" { has = true; }
+        }
+
+        assert_eq!(has, true)
+    }
+
+    #[test]
+    fn projects() {
+        let api_key = match env::var("CIRCLE_TOKEN") {
+            Ok(val) => val,
+            Err(_) => "".to_string(),
+        };
+
+        let api = api_v2::Api::new(
+            "https://circleci.com/api".to_string(),
+            api_key,
+        );
+        let projs: Vec<Project> = match api.projects() {
+            Ok(c) => c,
+            Err(_) => {
+                println!("Did not get expected result from endpoint!");
+                panic!("");
+            }
+        };
+        let mut has = false;
+        for p in &projs {
+            if p.reponame == "blog.gabrielsimmer.com" { has = true; }
         }
 
         assert_eq!(has, true)
